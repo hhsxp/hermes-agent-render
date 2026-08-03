@@ -1,65 +1,84 @@
 import os
 import logging
 from flask import Flask, request
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
-import threading
 import requests
 
-# --- CONFIGURAÇÕES ---
+# --- Carrega variáveis ---
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://hermes-agent-render.onrender.com/webhook")
-PORT = int(os.environ.get("PORT", 10000))
+WEBHOOK_PATH = f"/{TOKEN}"
 
-# --- LOGGING ---
+# --- Logger ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- FLASK APP ---
+# --- Flask ---
 app = Flask(__name__)
 
-# --- INICIALIZA BOT ---
-bot_app = ApplicationBuilder().token(TOKEN).build()
+# --- Função para chamar LLM via OpenRouter ---
+def call_openrouter(prompt):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://hermes-agent-render.onrender.com",
+        "X-Title": "Hermes Agent"
+    }
+    payload = {
+        "model": "google/gemini-2.0-flash",  # grátis
+        "messages": [
+            {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 1024
+    }
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=30)
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        return f"Erro na API ({r.status_code}): {r.text[:100]}"
+    except Exception as e:
+        return f"Falha na conexão: {str(e)}"
 
-async def start(update, context):
-    await update.message.reply_text("🤖 Hermes online! Pergunte algo.")
-
-async def handle_message(update, context):
-    msg = update.message.text
-    answer = call_openrouter(msg)
-    await update.message.reply_text(answer)
-
-# Registrando handlers
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-# --- ROTAS FLASK ---
+# --- Rotas Flask ---
 @app.route("/")
 def index():
     return "🤖 Hermes Agent Online!"
 
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+@app.route(WEBHOOK_PATH, methods=["POST"])
 def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.create_task(bot_app.process_update(update))
-    return "OK", 200
+    try:
+        update = request.get_json()
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"]["text"]
 
-@app.route("/healthz")
-def health():
-    return "OK", 200
+        # Responde
+        answer = call_openrouter(text)
 
+        # Envia resposta
+        send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        requests.post(send_url, json={"chat_id": chat_id, "text": answer})
+
+        logger.info(f"[{chat_id}] {text} → {answer[:50]}...")
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Erro no webhook: {e}")
+        return "OK", 200
+
+# --- Configura webhook ---
+def set_webhook():
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
+    full_url = f"https://hermes-agent-render.onrender.com{WEBHOOK_PATH}"
+    r = requests.post(url, json={"url": full_url})
+    if r.status_code == 200:
+        logger.info(f"✅ Webhook configurado: {full_url}")
+    else:
+        logger.warning(f"❌ Erro ao configurar webhook: {r.text}")
+
+# --- Inicializa ---
 if __name__ == "__main__":
-    import asyncio
-
-    async def setup_webhook():
-        await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_webhook())
-
-    logger.info("🤖 Webhook configurado!")
-    app.run(host="0.0.0.0", port=PORT)
+    set_webhook()
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
