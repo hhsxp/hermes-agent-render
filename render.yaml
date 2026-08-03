@@ -3,8 +3,6 @@ services:
     name: hermes-agent
     env: python
     plan: free
-    buildCommand: |
-      chmod +x startup.sh
-      ./startup.sh
+    buildCommand: bash startup.sh
     startCommand: python3 main.py
     autoDeploy: true
