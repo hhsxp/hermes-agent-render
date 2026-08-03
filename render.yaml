@@ -1,8 +1,11 @@
-services:
   - type: web
     name: hermes-agent
-    env: python
-    plan: free
-    buildCommand: bash startup.sh
-    startCommand: python3 main.py
-    autoDeploy: true
+    runtime: python3
+    buildCommand: |
+      git clone https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent
+      cd /opt/hermes-agent
+      pip install -r requirements.txt
+      pip install -e . --no-deps
+    startCommand: |
+      cd /opt/hermes-agent
+      python3 main.py
