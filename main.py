@@ -12,7 +12,7 @@ PORT = int(os.environ.get("PORT", 10000))
 # --- LOGGER ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,6 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"OK")
 
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
-
     def log_message(self, *args):
         pass
 
@@ -35,19 +31,18 @@ def run_keepalive_server():
     logger.info(f"🌐 Servidor HTTP rodando na porta {PORT}")
     server.serve_forever()
 
-# --- HANDLERS DO TELEGRAM ---
+# --- HANDLERS ---
 async def start(update, context):
     await update.message.reply_text(
-        "🤖 Hermes Agent Online!\n"
-        "Envie qualquer mensagem que eu respondo com ajuda de uma IA."
+        "🤖 Hermes Agent Online!\nEnvie qualquer mensagem."
     )
 
 async def handle_message(update, context):
-    user_msg = update.message.text
-    response = call_openrouter(user_msg)
+    msg = update.message.text
+    response = call_openrouter(msg)
     await update.message.reply_text(response)
 
-# --- INTEGRAÇÃO COM OPENROUTER ---
+# --- LLM ---
 def call_openrouter(prompt):
     import requests
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -55,32 +50,31 @@ def call_openrouter(prompt):
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://hermes-agent-render.onrender.com",
-        "X-Title": "Hermes Agent",
+        "X-Title": "Hermes Agent"
     }
     payload = {
         "model": "meta-llama/llama-4-maverick:free",
         "messages": [
-            {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
-            {"role": "user", "content": prompt},
+            {"role": "system", "content": "Você é Hermes, assistente inteligente e educado."},
+            {"role": "user", "content": prompt}
         ],
-        "max_tokens": 1024,
+        "max_tokens": 1024
     }
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
-        else:
-            return f"Erro na API ({r.status_code}): {r.text[:100]}"
+        return f"Erro na API: {r.status_code}"
     except Exception as e:
-        return f"Falha na conexão: {e}"
+        return f"Falha: {e}"
 
 # --- MAIN ---
 if __name__ == "__main__":
     print("🚀 Iniciando Hermes Agent...")
 
-    # Inicia servidor HTTP em background
+    # Start keepalive HTTP server in background
     threading.Thread(target=run_keepalive_server, daemon=True).start()
-    time.sleep(2)
+    time.sleep(1)
 
     from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -88,5 +82,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("🤖 Bot Telegram iniciado no main thread!")
+    logger.info("🤖 Bot Telegram iniciado!")
     app.run_polling()
