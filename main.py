@@ -1,8 +1,33 @@
-# Mantemos o processo vivo
+import os
 import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-print("Hermes Agent iniciando...")
-# Aqui você pode substituir pelo startup real do Hermes se necessário
-while True:
-    print("Rodando...")
-    time.sleep(60)
+# --- Servidor web leve só pra Render saber que tá vivo ---
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Service is Running!")
+
+def start_webserver():
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+# Começa o servidor web em outra thread
+t = threading.Thread(target=start_webserver)
+t.daemon = True
+t.start()
+
+# Agora começa o Hermes Agent
+print("Iniciando Hermes Agent...")
+# TODO: Aqui você pode adicionar a lógica real do Hermes
+
+# Mantém o processo vivo
+try:
+    while True:
+        time.sleep(60)
+except KeyboardInterrupt:
+    print("Encerrando...")
