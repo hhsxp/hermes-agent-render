@@ -9,7 +9,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Service is Running!")
+        self.wfile.write(b"Hermes Agent Online!")
 
 def start_webserver():
     port = int(os.environ.get("PORT", 8000))
@@ -21,9 +21,9 @@ t = threading.Thread(target=start_webserver)
 t.daemon = True
 t.start()
 
-# Agora começa o Hermes Agent
+# Agora começa o Hermes Agent (aqui você adiciona a lógica real depois)
 print("Iniciando Hermes Agent...")
-# TODO: Aqui você pode adicionar a lógica real do Hermes
+# TODO: Integrar com Telegram / OpenRouter depois
 
 # Mantém o processo vivo
 try:
