@@ -1,92 +1,111 @@
-import os
+# main.py - Hermes Agent via Telegram no Render
 import logging
-import threading
-from datetime import datetime
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- CONFIGURAÇÕES INICIAIS ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+# --- CONFIGURAÇÕES ---
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8872193272:AAFW8jvgIKtbSF8GNSIW-yz6I8hmb-wYfcI")
 
-# --- INICIALIZAÇÕES ---
-logging.basicConfig(level=logging.INFO)
+# --- LOGGER ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # --- SERVIDOR KEEPALIVE (Render exige) ---
-class HealthServer(BaseHTTPRequestHandler):
+class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"OK")
+        self.wfile.write(b"Hermes Agent Online!")
 
-def run_keepalive():
+    def log_message(self, format, *args):
+        pass  # Silencia logs do servidor HTTP
+
+def start_keepalive_server():
     port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthServer)
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info(f"Keepalive server rodando na porta {port}")
     server.serve_forever()
 
-# --- FUNÇÃO GENÉRICA: chamar LLM via OpenRouter ---
-def ask_llm(message):
-    from openai import OpenAI
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY
+# --- HANDLERS DO TELEGRAM ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 Olá! Sou o Hermes Agent!\n"
+        "Envie qualquer mensagem que eu respondo com ajuda de uma IA via OpenRouter.\n\n"
+        "Digite /help para ver comandos."
     )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 Comandos disponíveis:\n"
+        "/start - Iniciar conversa\n"
+        "/help - Mostrar este menu\n"
+        "Qualquer outra mensagem - Pergunte algo!"
+    )
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_msg = update.message.text
+    logger.info(f"Mensagem recebida: {user_msg}")
+
+    resposta = call_ollama(user_msg)
+
+    await update.message.reply_text(str(resposta))
+
+# --- INTEGRAÇÃO COM OPENROUTER ---
+def call_openrouter(prompt):
+    import requests
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": "Bearer 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",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://hermes-agent-render.onrender.com",
+        "X-Title": "Hermes Agent (Telegram)"
+    }
+    payload = {
+        "model": "google/gemini-2.0-flash",
+        "messages": [
+            {"role": "system", "content": "Você é Hermes, um assistente inteligente e gentil. Responda de forma clara e objetiva."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 1000,
+        "temperature": 0.7
+    }
+
     try:
-        resp = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free",
-            messages=[{"role": "user", "content": message}],
-            max_tokens=1024
-        )
-        return resp.choices[0].message.content
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+        else:
+            logger.error(f"Erro OpenRouter [{response.status_code}]: {response.text}")
+            return "Desculpe, não consegui processar sua solicitação agora."
     except Exception as e:
-        logger.error(f"Erro ao chamar LLM: {e}")
-        return "Erro no modelo de linguagem."
+        logger.error(f"Exceção ao chamar OpenRouter: {e}")
+        return "Ocorreu um erro ao tentar falar com o modelo de linguagem."
 
-# --- ROTINAS POR PLATAFORMA ---
-def start_telegram():
-    from telegram import Update
-    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
-    async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        resposta = ask_llm(update.message.text)
-        await update.message.reply_text(str(resposta))
-
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
-
-def start_discord():
-    if DISCORD_TOKEN:
-        import discord
-        intents = discord.Intents.default()
-        intents.messages = True
-        client = discord.Client(intents=intents)
-
-        @client.event
-        async def on_ready():
-            print(f"[Discord] Bot conectado como {client.user}")
-
-        @client.event
-        async def on_message(message):
-            if message.author == client.user:
-                return
-            if message.content.startswith("!hermes"):
-                prompt = message.content[7:].strip()
-                resposta = ask_llm(prompt)
-                await message.channel.send(str(resposta))
-
-        client.run(DISCORD_TOKEN)
+# Alias para uso interno
+call_ollama = call_openrouter  # Compatibilidade com chamadas antigas
 
 # --- MAIN ---
 if __name__ == "__main__":
-    threading.Thread(target=run_keepalive, daemon=True).start()
+    # Inicia o servidor keepalive em background
+    Thread(target=start_keepalive_server, daemon=True).start()
 
-    if TELEGRAM_TOKEN:
-        threading.Thread(target=start_telegram, daemon=True).start()
-    if DISCORD_TOKEN:
-        threading.Thread(target=start_discord, daemon=True).start()
+    # Inicia o bot do Telegram
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    print("Agente rodando. Aguardando mensagens...")
-    while True:
-        pass
+    # Handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    logger.info("🤖 Hermes Agent iniciado via Telegram...")
+    print("🤖 Hermes Agent iniciado via Telegram...")
+
+    # Roda o polling
+    app.run_polling()
