@@ -50,7 +50,6 @@ async def handle_message(update, context):
 # --- INTEGRAÇÃO COM OPENROUTER ---
 def call_openrouter(prompt):
     import requests
-
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -58,7 +57,6 @@ def call_openrouter(prompt):
         "HTTP-Referer": "https://hermes-agent-render.onrender.com",
         "X-Title": "Hermes Agent",
     }
-
     payload = {
         "model": "meta-llama/llama-4-maverick:free",
         "messages": [
@@ -67,7 +65,6 @@ def call_openrouter(prompt):
         ],
         "max_tokens": 1024,
     }
-
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
@@ -81,21 +78,15 @@ def call_openrouter(prompt):
 if __name__ == "__main__":
     print("🚀 Iniciando Hermes Agent...")
 
-    # Inicia servidor HTTP em background PRIMEIRO
+    # Inicia servidor HTTP em background
     threading.Thread(target=run_keepalive_server, daemon=True).start()
-
-    # AGUARDA o servidor HTTP iniciar
     time.sleep(2)
 
-    # Importa aqui para garantir que o HTTP já esteja rodando
-    from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+    from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-    # Cria e configura o app do Telegram NO MAIN THREAD
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logger.info("🤖 Bot Telegram iniciado no main thread!")
-
-    # RODA O BOT DIRETAMENTE (sem threading)
     app.run_polling()
