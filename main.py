@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- SERVIDOR HTTP (para manter alive no Render) ---
+# --- SERVIDOR HTTP ---
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -37,7 +37,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, *args):
-        pass  # Silencia logs do servidor HTTP
+        pass
 
 def run_keepalive_server():
     server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
@@ -53,19 +53,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📋 Comandos disponíveis:\n"
-        "/start - Iniciar conversa\n"
-        "/help - Mostrar esta ajuda\n\n"
-        "Qualquer outra mensagem será processada pela IA."
-    )
+    await update.message.reply_text("📋 Comandos disponíveis:\n/start - Iniciar\n/help - Ajuda")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text
-
-    # Chama OpenRouter
     response = call_openrouter(user_msg)
-
     await update.message.reply_text(response)
 
 # --- INTEGRAÇÃO COM OPENROUTER ---
@@ -79,6 +71,7 @@ def call_openrouter(prompt: str) -> str:
         "HTTP-Referer": "https://hermes-agent-render.onrender.com",
         "X-Title": "Hermes Agent",
     }
+
     payload = {
         "model": "meta-llama/llama-4-maverick:free",
         "messages": [
@@ -97,21 +90,11 @@ def call_openrouter(prompt: str) -> str:
     except Exception as e:
         return f"Falha na conexão: {e}"
 
-# --- MAIN ---
-if __name__ == "__main__":
-    print("🚀 Iniciando Hermes Agent...")
-
-    # Inicia servidor keepalive em background
-    Thread = threading.Thread(target=run_keepalive_server, daemon=True)
-    Thread.start()
-
-    # Configura e inicia bot do Telegram no main thread com asyncio
+# --- THREAD DO BOT ---
+def start_telegram_bot():
     import asyncio
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    async def run():
+    async def init_and_run():
         app = Application.builder().token(TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("help", help_command))
@@ -120,4 +103,19 @@ if __name__ == "__main__":
         logger.info("🤖 Bot Telegram iniciado!")
         await app.run_polling()
 
-    loop.run_until_complete(run())
+    asyncio.run(init_and_run())
+
+# --- MAIN ---
+if __name__ == "__main__":
+    print("🚀 Iniciando Hermes Agent...")
+
+    # Inicia servidor HTTP em background
+    threading.Thread(target=run_keepalive_server, daemon=True).start()
+
+    # Inicia bot do Telegram em thread separada
+    threading.Thread(target=start_telegram_bot, daemon=True).start()
+
+    # Mantém o processo vivo
+    logger.info("Hermes Agent pronto. Aguardando mensagens...")
+    while True:
+        time.sleep(3600)
