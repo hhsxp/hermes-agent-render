@@ -5,9 +5,9 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # --- CONFIGURAÇÕES INICIAIS ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8872193272:AAFW8jvgIKtbSF8GNSIW-yz6I8hmb-wYfcI")
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "MTUzMjE2NjkyNDcxOTM1ODE4Mg.GpRwUX.wzRn7Ls_zS6lYsA_1Gch9zIIirwa7oQAppbGHc")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 # --- INICIALIZAÇÕES ---
 logging.basicConfig(level=logging.INFO)
