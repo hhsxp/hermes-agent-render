@@ -29,20 +29,15 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # --- Função para chamar LLM via OpenRouter ---
-def call_openrouter(prompt):
-    url = "https://openrouter.ai/api/v1/chat/completions"
+def ask_llm(messages):
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://hermes-agent-render.onrender.com",
-        "X-Title": "Hermes Agent"
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
-    payload = {
-        "model": "openai/gpt-3.5-turbo",  # grátis
-        "messages": [
-            {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
-            {"role": "user", "content": prompt}
-        ],
+    data = {
+        "model": "llama3-8b-8192",
+        "messages": messages,
         "max_tokens": 1024
     }
     try:
@@ -87,32 +82,6 @@ def set_webhook():
         logger.info(f"✅ Webhook configurado: {full_url}")
     else:
         logger.warning(f"❌ Erro ao configurar webhook: {r.text}")
-
-def ask_llm(messages):
-    fallbacks = [
-        "openai/gpt-3.5-turbo",
-        "meta-llama/llama-4-maverick:free",
-        "mistralai/mistral-small-3.5:free"
-    ]
-
-    for model in fallbacks:
-        try:
-            r = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages
-                },
-                headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
-            )
-            if r.status_code == 200:
-                return r.json()["choices"][0]["message"]["content"]
-            else:
-                print(f"[WARN ] Modelo falhou: {model} ({r.status_code})")
-        except Exception as e:
-            print(f"[ERROR] {model}: {e}")
-
-    return "⚠️ Todos os modelos falharam. Tente novamente mais tarde."
 
 # --- Inicializa ---
 if __name__ == "__main__":
