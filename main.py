@@ -53,12 +53,19 @@ def ask_llm(messages):
 def index():
     return "🤖 Hermes Agent Online!"
 
-@app.route("/webhook", methods=["GET", "POST"])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     try:
         update = request.get_json()
         chat_id = update["message"]["chat"]["id"]
         text = update["message"]["text"]
+        answer = call_ia(text)
+        send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={chat_id}&text={answer}"
+        requests.get(send_url)
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Erro no webhook: {e}")
+        return "OK", 200
 
         # Responde
         answer = ask_llm([
