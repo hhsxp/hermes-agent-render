@@ -26,13 +26,14 @@ def call_openrouter(prompt):
         "HTTP-Referer": "https://hermes-agent-render.onrender.com",
         "X-Title": "Hermes Agent"
     }
-    payload = {
-       "model": "meta-llama/llama-4-maverick:free"
-        "messages": [
-            {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 1024
+   payload = {
+    "model": "meta-llama/llama-4-maverick:free",
+    "messages": [
+        {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
+        {"role": "user", "content": prompt}
+    ],
+    "max_tokens": 1024
+}
     }
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
