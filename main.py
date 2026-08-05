@@ -38,7 +38,7 @@ def call_openrouter(prompt):
         "X-Title": "Hermes Agent"
     }
     payload = {
-        "model": "mistralai/mistral-small-3.5:free",  # grátis
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",  # grátis
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
             {"role": "user", "content": prompt}
