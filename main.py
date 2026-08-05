@@ -53,7 +53,7 @@ def ask_llm(messages):
 def index():
     return "🤖 Hermes Agent Online!"
 
-@app.route(f"/{TOKEN}", methods=["POST"])
+@app.route(f"/{TOKEN}", methods=["GET", "POST"])
 def telegram_webhook():
     try:
         update = request.get_json()
