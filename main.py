@@ -38,7 +38,7 @@ def call_openrouter(prompt):
         "X-Title": "Hermes Agent"
     }
     payload = {
-        "model": "meta-llama/llama-4-maverick:free",  # grátis
+        "model": "mistralai/mistral-small-3.5:free",  # grátis
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
             {"role": "user", "content": prompt}
