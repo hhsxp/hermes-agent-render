@@ -3,6 +3,17 @@ import logging
 from flask import Flask, request
 from dotenv import load_dotenv
 import requests
+import threading, time, requests
+
+def keepalive():
+    while True:
+        try:
+            requests.get("https://hermes-agent-render-21ab.onrender.com")
+        except:
+            pass
+        time.sleep(25 * 60)  # pinga a cada 25 minutos
+
+threading.Thread(target=keepalive, daemon=True).start()
 
 # --- Carrega variáveis ---
 load_dotenv()
