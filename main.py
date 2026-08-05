@@ -1,85 +1,101 @@
 import os
 import logging
+import threading
+import time
 from flask import Flask, request
-from dotenv import load_dotenv
 import requests
+from telegram import Update, Bot
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- Carrega variáveis ---
-load_dotenv()
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+# --- CONFIGURAÇÕES ---
+TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-WEBHOOK_PATH = f"/{TOKEN}"
+PORT = int(os.environ.get("PORT", 10000))
 
-# --- Logger ---
-logging.basicConfig(level=logging.INFO)
+# --- LOGGER ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# --- Flask ---
+# --- FLASK APP ---
 app = Flask(__name__)
 
-# --- Função para chamar LLM via OpenRouter ---
-def call_openrouter(prompt):
+# --- FUNÇÃO PARA CHAMAR O MODELO GRATUITO ---
+def call_llm(prompt: str) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://hermes-agent-render.onrender.com",
+        "HTTP-Referer": "https://seusite.com",
         "X-Title": "Hermes Agent"
     }
-   payload = {
-    "model": "meta-llama/llama-4-maverick:free",
-    "messages": [
-        {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
-        {"role": "user", "content": prompt}
-    ],
-    "max_tokens": 1024
-}
+    payload = {
+        "model": "meta-llama/llama-4-maverick:free",
+        "messages": [
+            {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 1024
     }
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
-        return f"Erro na API ({r.status_code}): {r.text[:100]}"
+        else:
+            return f"⚠️ Erro na API: {r.status_code} - {r.text[:200]}"
     except Exception as e:
-        return f"Falha na conexão: {str(e)}"
+        return f"❌ Falha na conexão: {str(e)}"
 
-# --- Rotas Flask ---
+# --- HANDLERS DO TELEGRAM ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 Hermes Agent online!\n"
+        "Digite algo e eu respondo com ajuda de uma IA.\n\n"
+        "/help - Ver comandos disponíveis"
+    )
+
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📩 Digite qualquer mensagem e eu respondo!")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
+    logger.info(f"[MSG RECEIVED] User: {user_input}")
+    response = call_llm(user_input)
+    await update.message.reply_text(response)
+
+# --- WEB SERVER (Flask) ---
 @app.route("/")
 def index():
-    return "🤖 Hermes Agent Online!"
+    return "<h1>🤖 Hermes Agent Online</h1>", 200
 
-@app.route("/8872193272:AAHhJQi1eQInSBdi6RsGjqDZd754whG64UE", methods=["GET", "POST"])
+@app.route("/health")
+def health():
+    return "OK", 200
+
+# --- ROTAS WEBHOOK ---
+@app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
-    try:
-        update = request.get_json()
-        chat_id = update["message"]["chat"]["id"]
-        text = update["message"]["text"]
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    update_queue.put(update)
+    return "OK", 200
 
-        # Responde
-        answer = call_openrouter(text)
+# --- INICIALIZAÇÃO DO BOT ---
+bot_app = Application.builder().token(TOKEN).build()
+update_queue = bot_app.update_queue
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("help", help_cmd))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        # Envia resposta
-        send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-        requests.post(send_url, json={"chat_id": chat_id, "text": answer})
-
-        logger.info(f"[{chat_id}] {text} → {answer[:50]}...")
-        return "OK", 200
-    except Exception as e:
-        logger.error(f"Erro no webhook: {e}")
-        return "OK", 200
-
-# --- Configura webhook ---
-def set_webhook():
-    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-    full_url = f"https://hermes-agent-render.onrender.com{WEBHOOK_PATH}"
-    r = requests.post(url, json={"url": full_url})
-    if r.status_code == 200:
-        logger.info(f"✅ Webhook configurado: {full_url}")
-    else:
-        logger.warning(f"❌ Erro ao configurar webhook: {r.text}")
-
-# --- Inicializa ---
+# --- MAIN ---
 if __name__ == "__main__":
-    set_webhook()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    # Inicia o bot em thread separada
+    def start_bot():
+        bot_app.run_polling()
+
+    threading.Thread(target=start_bot, daemon=True).start()
+
+    # Inicia web server Flask
+    logger.info("🌐 Webserver online!")
+    app.run(host="0.0.0.0", port=PORT)
