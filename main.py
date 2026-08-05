@@ -47,7 +47,7 @@ def call_openrouter(prompt):
 def index():
     return "🤖 Hermes Agent Online!"
 
-@app.route(WEBHOOK_PATH, methods=["POST"])
+@app.route("/8872193272:AAHhJQi1eQInSBdi6RsGjqDZd754whG64UE", methods=["GET", "POST"])
 def telegram_webhook():
     try:
         update = request.get_json()
