@@ -59,9 +59,15 @@ def telegram_webhook():
         update = request.get_json()
         chat_id = update["message"]["chat"]["id"]
         text = update["message"]["text"]
+
+        # Responde
         answer = call_ia(text)
+
+        # Envia resposta
         send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={chat_id}&text={answer}"
         requests.get(send_url)
+
+        logger.info(f"[{chat_id}] {text} → {answer[:50]}...")
         return "OK", 200
     except Exception as e:
         logger.error(f"Erro no webhook: {e}")
