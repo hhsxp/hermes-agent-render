@@ -54,18 +54,19 @@ def index():
     return "🤖 Hermes Agent Online!"
 
 @app.route(f"/{TOKEN}", methods=["GET", "POST"])
+@app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
     try:
         update = request.get_json()
         chat_id = update["message"]["chat"]["id"]
         text = update["message"]["text"]
 
-        # Responde
+        # Responde com IA
         answer = call_ia(text)
 
-        # Envia resposta
-        send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={chat_id}&text={answer}"
-        requests.get(send_url)
+        # Envia resposta via Telegram
+        send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        requests.post(send_url, json={"chat_id": chat_id, "text": answer})
 
         logger.info(f"[{chat_id}] {text} → {answer[:50]}...")
         return "OK", 200
