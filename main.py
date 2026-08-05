@@ -61,7 +61,10 @@ def telegram_webhook():
         text = update["message"]["text"]
 
         # Responde
-        answer = call_openrouter(text)
+        answer = ask_llm([
+    {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
+    {"role": "user", "content": text}
+])
 
         # Envia resposta
         send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
