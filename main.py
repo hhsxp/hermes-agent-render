@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek/deepseek-chat-v1.5:free"",
+        "model": "deepseek/deepseek-chat-v1.5:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
