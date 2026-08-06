@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "poolside/laguna-s-2.1:free",
+        "model": "google/gemma-2-9b-it:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
