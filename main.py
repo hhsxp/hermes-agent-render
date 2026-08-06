@@ -29,17 +29,10 @@ def keepalive():
 
 threading.Thread(target=keepalive, daemon=True).start()
 
-# --- Função para chamar Groq ---
 def call_ia(prompt):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "gemma2-9b-it",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1024
+url = "https://openrouter.ai/api/v1/chat/completions"
+headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+"model": "meta-llama/llama-4-maverick:free"
     }
     try:
         r = requests.post(url, json=data, headers=headers, timeout=30)
