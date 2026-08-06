@@ -37,7 +37,7 @@ def call_ia(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "mixtral-8x7b-32768",
+        "model": "gemma-7b-it",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
