@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "google/gemma-2-9b-it:free",
+        "model": "microsoft/phi-3-mini-4k-instruct:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
