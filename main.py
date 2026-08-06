@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "meta-llama/llama-4-maverick:free",
+        "model": "microsoft/phi-3-mini-4k-instruct:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
