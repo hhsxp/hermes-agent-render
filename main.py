@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "microsoft/phi-3-mini-4k-instruct:free",
+        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
