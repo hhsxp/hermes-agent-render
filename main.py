@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 WEBHOOK_URL = "https://hermes-agent-render-21ab.onrender.com/webhook"
 
 # Modelos atualizados
-LLM_MODEL = "meta-llama/llama-4-maverick"
-IMAGE_MODEL = "stabilityai/stable-diffusion-xl-base-1024-v12"
+LLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+IMAGE_MODEL = "stabilityai/sdxl-lightning"
 VIDEO_MODEL = "Wendhe/Go_with_the_flow"
 
 # --- Keepalive ---
@@ -58,8 +58,35 @@ def send_video(chat_id, video_bytes, caption=""):
         data={"chat_id": chat_id, "caption": caption}
     )
 
-# --- LLM via OpenRouter ---
+# --- LLM via HuggingFace ---
 def query_llm(chat_id, prompt):
+    url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
+    headers = {
+        "Authorization": f"Bearer {HF_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "inputs": prompt
+    }
+    try:
+        r = requests.post(url, json=data, headers=headers, timeout=30)
+        if r.status_code == 200:
+            result = r.json()
+            if isinstance(result, list) and len(result) > 0:
+                resposta = result[0].get("generated_text", "Sem resposta.")
+                send_message(chat_id, resposta)
+            else:
+                send_message(chat_id, f"ℹ️ Resposta: {str(result)[:200]}")
+        else:
+            logger.warning(f"LLM falhou ({r.status_code}): {r.text[:200]}")
+            # Fallback para OpenRouter
+            fallback_chat(chat_id, prompt)
+    except Exception as e:
+        logger.error(f"Falha LLM: {str(e)}")
+        fallback_chat(chat_id, prompt)
+
+# --- Fallback via OpenRouter ---
+def fallback_chat(chat_id, prompt):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -68,7 +95,7 @@ def query_llm(chat_id, prompt):
         "X-Title": "Hermes Agent"
     }
     data = {
-        "model": LLM_MODEL,
+        "model": "meta-llama/llama-4-maverick",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 2048,
         "temperature": 0.7
@@ -80,9 +107,9 @@ def query_llm(chat_id, prompt):
             send_message(chat_id, resposta)
         else:
             err = r.json().get("error", {}).get("message", "Erro desconhecido")
-            send_message(chat_id, f"⚠️ Erro: {err[:200]}")
+            send_message(chat_id, f"⚠️ Erro no fallback: {err[:200]}")
     except Exception as e:
-        send_message(chat_id, f"❌ Falha: {str(e)}")
+        send_message(chat_id, f"❌ Ambos os modelos falharam: {str(e)}")
 
 # --- Gerar imagem (HuggingFace) ---
 def generate_image(chat_id, prompt):
@@ -95,9 +122,10 @@ def generate_image(chat_id, prompt):
             send_photo(chat_id, r.content)
         else:
             logger.warning(f"Fallback imagem: {r.status_code}")
-            query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
-    except Exception:
-        query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
+            fallback_chat(chat_id, f"Desenhe digitalmente: {prompt}")
+    except Exception as e:
+        logger.error(f"Falha imagem: {str(e)}")
+        fallback_chat(chat_id, f"Desenhe digitalmente: {prompt}")
 
 # --- Gerar vídeo (HuggingFace) ---
 def generate_video(chat_id, prompt):
@@ -110,9 +138,10 @@ def generate_video(chat_id, prompt):
             send_video(chat_id, r.content, prompt)
         else:
             logger.warning(f"Fallback vídeo: {r.status_code}")
-            query_llm(chat_id, prompt)
-    except Exception:
-        query_llm(chat_id, prompt)
+            fallback_chat(chat_id, prompt)
+    except Exception as e:
+        logger.error(f"Falha vídeo: {str(e)}")
+        fallback_chat(chat_id, prompt)
 
 # --- Processamento de atualizações ---
 def process_update(update):
