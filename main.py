@@ -15,28 +15,32 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 def call_llm(prompt):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
-        "X-Title": "Hermes Bot"
-    }
-    data = {
-        "model": "nousresearch/tailwind-v1.5b:free",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1024,
-        "temperature": 0.7
-    }
-    try:
-        r = requests.post(url, json=data, headers=headers, timeout=30)
-        if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"]
-        else:
-            logger.error(f"Erro OpenRouter: {r.status_code} - {r.text[:200]}")
-            return f"Erro na API ({r.status_code}): {r.text[:100]}"
-    except Exception as e:
-        logger.error(f"Falha na LLM: {str(e)}")
-        return f"Falha na conexão: {str(e)}"
+    models = [
+        "nousresearch/tailwind-v1.5b:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free"
+    ]
+    for model in models:
+        try:
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
+                "X-Title": "Hermes Bot"
+            }
+            data = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 512
+            }
+            r = requests.post(url, json=data, headers=headers, timeout=15)
+            if r.status_code == 200:
+                return r.json()["choices"][0]["message"]["content"]
+            else:
+                logger.warning(f"Modelo {model} falhou: {r.status_code}")
+        except Exception as e:
+            logger.error(f"Falha com {model}: {str(e)}")
+    return "⚠️ Todos os modelos falharam. Tente novamente."
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
