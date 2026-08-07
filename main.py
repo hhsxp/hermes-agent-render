@@ -4,25 +4,33 @@ import threading
 import time
 import requests
 from flask import Flask, request
+from dotenv import load_dotenv
 
-# Carrega variáveis
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# Configurações
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_API_KEY = os.getenv("HF_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-app = Flask(__name__)
+# Logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# App Flask
+app = Flask(__name__)
+
+# Webhook URL
 WEBHOOK_URL = "https://hermes-agent-render-21ab.onrender.com/webhook"
 
 # Modelos
-LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
+LLM_MODEL = "tiiuae/falcon-7b-instruct"
+FALLBACK_MODEL = "nousresearch/tailwind-v1.5b:free"
 IMAGE_MODEL = "stabilityai/sdxl-lightning"
 VIDEO_MODEL = "Wendhe/Go_with_the_flow"
 
-# Keepalive
+# Keepalive (evita inatividade)
 def ping_server():
     while True:
         try:
@@ -33,50 +41,40 @@ def ping_server():
 
 threading.Thread(target=ping_server, daemon=True).start()
 
-# Enviar mensagem
+# Funções de envio
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
 
-# Enviar imagem
 def send_photo(chat_id, photo_bytes):
     url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
     requests.post(url, files={"photo": photo_bytes}, data={"chat_id": chat_id})
 
-# Enviar vídeo
 def send_video(chat_id, video_bytes, caption=""):
     url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
     requests.post(url, files={"video": video_bytes}, data={"chat_id": chat_id, "caption": caption})
 
-# LLM via HuggingFace (com fallback)
+# LLM via HuggingFace
 def query_llm(chat_id, prompt):
     hf_url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
-    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
 
     try:
         r = requests.post(hf_url, headers=headers, json={"inputs": prompt}, timeout=60)
-
         if r.status_code == 200:
             result = r.json()
-
-            # ✅ Tratamento flexível para diferentes formatos
             if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-                resposta = result[0]["generated_text"]
-            elif isinstance(result, dict) and "generated_text" in result:
-                resposta = result["generated_text"]
+                return send_message(chat_id, result[0]["generated_text"])
             elif isinstance(result, dict) and "text" in result:
-                resposta = result["text"]
+                return send_message(chat_id, result["text"])
             else:
-                resposta = str(result)[:500] if result else "Nenhuma resposta recebida."
-
-            send_message(chat_id, resposta)
+                return send_message(chat_id, f"Resposta inesperada: {str(result)[:200]}")
         else:
-            logger.warning(f"HuggingFace failed ({r.status_code}): {r.text[:100]}")
-            fallback_llm(chat_id, prompt)
-
+            logger.warning(f"HF falhou ({r.status_code})")
+            return fallback_llm(chat_id, prompt)
     except Exception as e:
         logger.error(f"Erro no HuggingFace: {e}")
-        fallback_llm(chat_id, prompt)
+        return fallback_llm(chat_id, prompt)
 
 # Fallback via OpenRouter
 def fallback_llm(chat_id, prompt):
@@ -90,17 +88,16 @@ def fallback_llm(chat_id, prompt):
     data = {
         "model": FALLBACK_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 2048,
-        "temperature": 0.7
+        "max_tokens": 2048
     }
     try:
         r = requests.post(url, json=data, headers=headers, timeout=30)
         resposta = r.json()["choices"][0]["message"]["content"]
-        send_message(chat_id, f"[Fallback] {resposta}")
+        send_message(chat_id, f"[Resposta alternativa] {resposta}")
     except Exception as e:
-        send_message(chat_id, f"❌ Erro: {str(e)}")
+        send_message(chat_id, f"❌ Erro crítico: {str(e)}")
 
-# Gerar imagem
+# Geração de imagem
 def generate_image(chat_id, prompt):
     url = f"https://api-inference.huggingface.co/models/{IMAGE_MODEL}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
@@ -110,11 +107,11 @@ def generate_image(chat_id, prompt):
         if r.status_code == 200:
             send_photo(chat_id, r.content)
         else:
-            send_message(chat_id, f"⚠️ Erro imagem: {r.status_code}")
+            send_message(chat_id, f"⚠️ Erro imagem ({r.status_code})")
     except Exception as e:
         send_message(chat_id, f"❌ Falha gerar imagem: {str(e)}")
 
-# Gerar vídeo
+# Geração de vídeo
 def generate_video(chat_id, prompt):
     url = f"https://api-inference.huggingface.co/models/{VIDEO_MODEL}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
@@ -124,11 +121,11 @@ def generate_video(chat_id, prompt):
         if r.status_code == 200:
             send_video(chat_id, r.content, prompt)
         else:
-            send_message(chat_id, f"⚠️ Erro vídeo: {r.status_code}")
+            send_message(chat_id, f"⚠️ Erro vídeo ({r.status_code})")
     except Exception as e:
         send_message(chat_id, f"❌ Falha gerar vídeo: {str(e)}")
 
-# Processar atualização
+# Processamento de mensagens
 def process_update(update):
     try:
         chat_id = update["message"]["chat"]["id"]
@@ -165,12 +162,12 @@ def telegram_webhook():
         logger.error(f"Erro no webhook: {e}")
         return "OK", 200
 
-# Configurar webhook
+# Configura webhook
 def set_webhook():
     url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
     requests.post(url, json={"url": WEBHOOK_URL})
 
-# Iniciar
+# Início
 if __name__ == "__main__":
     set_webhook()
     port = int(os.environ.get("PORT", 10000))
