@@ -8,61 +8,55 @@ from flask import Flask, request
 # --- Configurações ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-WEBHOOK_URL = f"https://hermes-agent-render-21ab.onrender.com/webhook"
 
 # --- Logger ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Flask app ---
+# --- App Flask ---
 app = Flask(__name__)
 
-# --- Keepalive (evita dormência do Render) ---
+# --- Keepalive (evita dormência) ---
 def keepalive():
     while True:
         try:
             requests.get("https://hermes-agent-render-21ab.onrender.com")
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Keepalive falhou: {e}")
         time.sleep(25 * 60)
 
 threading.Thread(target=keepalive, daemon=True).start()
 
-# --- Chamada ao LLM (OpenRouter grátis) ---
+# --- LLM Call ---
 def call_llm(prompt):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
-        "X-Title": "Hermes Agent"
+        "Content-Type": "application/json"
     }
     payload = {
         "model": "meta-llama/llama-4-maverick:free",
         "messages": [
-            {"role": "system", "content": "Você é Hermes, um assistente inteligente e educado."},
+            {"role": "system", "content": "Você é Hermes, um assistente inteligente e útil."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 1024,
-        "temperature": 0.7
+        "max_tokens": 1024
     }
-
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
         else:
-            logger.error(f"Erro OpenRouter: {r.status_code} - {r.text[:200]}")
-            return f"Erro na API ({r.status_code}): {r.text[:100]}"
+            return f"Erro na API ({r.status_code}): {r.text[:200]}"
     except Exception as e:
-        logger.error(f"Falha na LLM: {str(e)}")
         return f"Falha na conexão: {str(e)}"
 
-# --- Rotas Flask ---
+# --- Rota principal ---
 @app.route("/")
 def index():
     return "🤖 Hermes Agent Online!", 200
 
+# --- Webhook do Telegram ---
 @app.route("/webhook", methods=["POST"])
 def telegram_webhook():
     try:
@@ -81,16 +75,17 @@ def telegram_webhook():
         logger.error(f"Erro no webhook: {e}")
         return "OK", 200
 
-# --- Configura webhook no início ---
+# --- Webhook setup ---
 def set_webhook():
     url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-    r = requests.post(url, json={"url": WEBHOOK_URL})
+    webhook_url = "https://hermes-agent-render-21ab.onrender.com/webhook"
+    r = requests.post(url, json={"url": webhook_url})
     if r.status_code == 200:
-        logger.info(f"✅ Webhook configurado: {WEBHOOK_URL}")
+        logger.info(f"✅ Webhook configurado: {webhook_url}")
     else:
         logger.warning(f"❌ Erro ao configurar webhook: {r.text}")
 
-# --- Inicializa ---
+# --- Execução ---
 if __name__ == "__main__":
     set_webhook()
     port = int(os.environ.get("PORT", 10000))
