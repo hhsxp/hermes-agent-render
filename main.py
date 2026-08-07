@@ -77,7 +77,7 @@ def process_update(update):
 
 # LLM via HuggingFace
 def query_llm(chat_id, prompt):
-    hf_url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
+    hf_url = f"https://api-inference.huggingface.com/models/{LLM_MODEL}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
 
     try:
@@ -120,7 +120,7 @@ def fallback_llm(chat_id, prompt):
 
 # Geração de imagem
 def generate_image(chat_id, prompt):
-    url = f"https://api-inference.huggingface.co/models/stabilityai/sdxl-lightning"
+    url = f"https://api-inference.huggingface.com/models/stabilityai/sdxl-lightning"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     data = {"inputs": prompt}
     try:
@@ -134,7 +134,7 @@ def generate_image(chat_id, prompt):
 
 # Geração de vídeo
 def generate_video(chat_id, prompt):
-    url = f"https://api-inference.huggingface.co/models/Wendhe/Go_with_the_flow"
+    url = f"https://api-inference.huggingface.com/models/Wendhe/Go_with_the_flow"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     data = {"inputs": prompt}
     try:
