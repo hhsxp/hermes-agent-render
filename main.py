@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Logger
 logging.basicConfig(level=logging.INFO)
@@ -17,29 +17,28 @@ logger = logging.getLogger(__name__)
 # App Flask
 app = Flask(__name__)
 
-def call_llm(prompt, image_url=None):
-    api_url = "https://api-inference.huggingface.com/models/Qwen/Qwen2.5-VL-7B-Instruct"
-    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-
-    if image_url:
-        payload = {"image_url": image_url, "prompt": prompt}
-    else:
-        payload = {"inputs": prompt}
-
+def call_llm(prompt):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
+        "X-Title": "Hermes Bot"
+    }
+    data = {
+        "model": "meta-llama/llama-4-maverick:free",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1024,
+        "temperature": 0.7
+    }
     try:
-        response = requests.post(api_url, headers=headers, json=payload)
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                return result[0].get("generated_text", "Erro: resposta vazia.")
-            elif isinstance(result, dict) and "error" in result:
-                return f"Erro na API: {result['error']}"
-            else:
-                return str(result)
+        r = requests.post(url, json=data, headers=headers, timeout=30)
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
         else:
-            return f"Erro HTTP {response.status_code}: {response.text[:100]}"
+            logger.error(f"Erro OpenRouter: {r.status_code} - {r.text[:200]}")
+            return f"Erro na API ({r.status_code}): {r.text[:100]}"
     except Exception as e:
-        logger.error(f"Falha na API: {str(e)}")
+        logger.error(f"Falha na LLM: {str(e)}")
         return f"Falha na conexão: {str(e)}"
 
 def send_message(chat_id, text):
