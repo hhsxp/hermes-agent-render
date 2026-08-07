@@ -55,13 +55,25 @@ def query_llm(chat_id, prompt):
 
     try:
         r = requests.post(hf_url, headers=headers, json={"inputs": prompt}, timeout=60)
+
         if r.status_code == 200:
             result = r.json()
-            resposta = result[0]["generated_text"] if isinstance(result, list) else str(result)[:500]
+
+            # ✅ Tratamento flexível para diferentes formatos
+            if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
+                resposta = result[0]["generated_text"]
+            elif isinstance(result, dict) and "generated_text" in result:
+                resposta = result["generated_text"]
+            elif isinstance(result, dict) and "text" in result:
+                resposta = result["text"]
+            else:
+                resposta = str(result)[:500] if result else "Nenhuma resposta recebida."
+
             send_message(chat_id, resposta)
         else:
             logger.warning(f"HuggingFace failed ({r.status_code}): {r.text[:100]}")
             fallback_llm(chat_id, prompt)
+
     except Exception as e:
         logger.error(f"Erro no HuggingFace: {e}")
         fallback_llm(chat_id, prompt)
