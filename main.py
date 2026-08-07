@@ -35,7 +35,7 @@ def call_llm(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-       "model": "mistralai/mistral-7b-instruct:free",
+        "model": "meta-llama/llama-3.1-70b:free",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente inteligente e útil."},
             {"role": "user", "content": prompt}
