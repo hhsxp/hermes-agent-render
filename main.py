@@ -21,7 +21,7 @@ def call_llm(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "deepseek-coder-v2-lite:free",
+        "model": "microsoft/phi-3-mini-4k-instruct:free",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
             {"role": "user", "content": prompt}
