@@ -61,9 +61,12 @@ def query_llm(chat_id, prompt):
         send_message(chat_id, f"❌ Falha: {str(e)}")
 
 def generate_image(chat_id, prompt):
-    url = f"https://api-inference.huggingface.com/models/{IMAGE_MODEL}"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    data = {"inputs": prompt}
+    ...
+    if r.status_code == 200:
+        send_photo(...)
+    else:
+        logger.warning(f"Fallback: {r.text}")
+        query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
     try:
         r = requests.post(url, headers=headers, json=data, timeout=60)
         if r.status_code == 200:
