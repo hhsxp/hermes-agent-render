@@ -1,7 +1,5 @@
 import os
 import logging
-import threading
-import time
 import requests
 from flask import Flask, request
 from dotenv import load_dotenv
@@ -54,29 +52,24 @@ def query_llm(chat_id, prompt):
             resposta = r.json()["choices"][0]["message"]["content"]
             send_message(chat_id, resposta)
         else:
-            logger.error(f"Erro OpenRouter: {r.status_code} - {r.text[:100]}")
-            send_message(chat_id, f"❌ Erro: {r.status_code} - {r.text[:100]}")
+            msg_error = r.text[:100] if r.text else "Erro desconhecido"
+            send_message(chat_id, f"❌ Erro ({r.status_code}): {msg_error}")
     except Exception as e:
-        logger.error(f"Falha na LLM: {str(e)}")
         send_message(chat_id, f"❌ Falha: {str(e)}")
 
 def generate_image(chat_id, prompt):
-    ...
-    if r.status_code == 200:
-        send_photo(...)
-    else:
-        logger.warning(f"Fallback: {r.text}")
-        query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
+    url = f"https://api-inference.huggingface.com/models/{IMAGE_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    data = {"inputs": prompt}
     try:
         r = requests.post(url, headers=headers, json=data, timeout=60)
         if r.status_code == 200:
             send_photo(chat_id, r.content)
         else:
-            logger.error(f"Erro imagem: {r.status_code} - {r.text[:100]}")
-            send_message(chat_id, f"❌ Erro imagem: {r.status_code} - {r.text[:100]}")
-    except Exception as e:
-        logger.error(f"Falha imagem: {str(e)}")
-        send_message(chat_id, f"❌ Falha: {str(e)}")
+            logger.warning(f"Image failed: {r.text}")
+            query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
+    except Exception:
+        query_llm(chat_id, f"Desenhe digitalmente: {prompt}")
 
 def generate_video(chat_id, prompt):
     url = f"https://api-inference.huggingface.com/models/{VIDEO_MODEL}"
@@ -87,27 +80,26 @@ def generate_video(chat_id, prompt):
         if r.status_code == 200:
             send_video(chat_id, r.content, prompt)
         else:
-            logger.error(f"Erro vídeo: {r.status_code} - {r.text[:100]}")
-            send_message(chat_id, f"❌ Erro vídeo: {r.status_code}")
-    except Exception as e:
-        logger.error(f"Falha vídeo: {str(e)}")
-        send_message(chat_id, f"❌ Falha: {str(e)}")
+            logger.warning(f"Video failed: {r.text}")
+            query_llm(chat_id, prompt)
+    except Exception:
+        query_llm(chat_id, prompt)
 
 def process_update(update):
     try:
         chat_id = update["message"]["chat"]["id"]
         message = update["message"]
-        if "text" in message:
-            text = message["text"].strip()
-            logger.info(f"[{chat_id}] {text}")
-            if text.startswith("/img"):
-                prompt_img = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato fofo"
-                generate_image(chat_id, prompt_img)
-            elif text.startswith("/video"):
-                prompt_video = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato dançando"
-                generate_video(chat_id, prompt_video)
-            else:
-                query_llm(chat_id, text)
+        text = message.get("text", "").strip()
+        logger.info(f"[{chat_id}] {text}")
+
+        if text.startswith("/img"):
+            prompt_img = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato fofo"
+            generate_image(chat_id, prompt_img)
+        elif text.startswith("/video"):
+            prompt_video = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato dançando"
+            generate_video(chat_id, prompt_video)
+        else:
+            query_llm(chat_id, text)
     except Exception as e:
         logger.error(f"Erro no processamento: {str(e)}")
 
