@@ -26,7 +26,7 @@ def call_openrouter(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek/deepseek-v2:free",
+        "model": "nousresearch/tailwind-v1.5b:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024
     }
