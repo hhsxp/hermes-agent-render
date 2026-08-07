@@ -1,190 +1,161 @@
 import os
-import requests
-from flask import Flask, request, jsonify, Response
 import logging
+import threading
+import time
+import requests
+from flask import Flask, request
+from dotenv import load_dotenv
 
-# Variáveis de ambiente
+# --- Configurações ---
+load_dotenv()
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-HF_API_KEY = os.getenv("HF_API_KEY")  # Novo: para gerar imagens
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Novo: para STT
+HF_API_KEY = os.getenv("HF_API_KEY")  # Chave HuggingFace para imagens
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # Opcional: Whisper via Groq
 
+# --- App Flask ---
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-app = Flask(__name__)
 
-# ========================
-# 📝 Função Qwen via OpenRouter (principal)
-# ========================
-def call_openrouter(prompt):
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
-        "X-Title": "Hermes Agent",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "qwen/qwen-2.5-72b-instruct",
-        "messages": [
-            {"role": "system", "content": "Você é Hermes, um assistente inteligente."},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 2000
-    }
-    try:
-        r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=30)
-        if r.status_code == 200:
-            if r.status_code != 200:
-    return f"Erro ({r.status_code}): {r.text[:100]}"
-try:
-    return r.json()["choices"][0]["message"]["content"]
-except KeyError:
-    return f"Resposta inesperada: {r.text[:100]}"
-        else:
-            return f"Erro ({r.status_code}): {r.text[:100]}"
-    except Exception as e:
-        return f"Falha na API: {str(e)}"
+# --- Webhook URL dinâmico ---
+WEBHOOK_URL = f"https://hermes-agent-render.onrender.com/{TOKEN}"
 
-# ========================
-# 🖼️ Gerar Imagem via HuggingFace
-# ========================
-def generate_image(prompt):
-    try:
-        r = requests.post(
-            "https://api-inference.huggingface.com/models/stabilityai/stable-diffusion-xl-base-1024-v12",
-            headers={"Authorization": f"Bearer {HF_API_KEY}"},
-            json={"inputs": prompt}
-        )
-        if r.status_code == 200:
-            return r.content
-        else:
-            return None
-    except:
-        return None
+# --- Modelos atualizados ---
+LLM_MODEL = "meta-llama/llama-4-maverick"  # Grátis no OpenRouter
+IMAGE_MODEL = "stabilityai/sdxl-lightning"  # Mais rápido que SDXL
+VIDEO_MODEL = "Wendhe/Go_with_the_flow"  # Geração de vídeo
 
-# ========================
-# 🎤 Converter Áudio para Texto (Whisper via Groq)
-# ========================
-def transcribe_audio(file_path):
-    try:
-        files = {"file": (os.path.basename(file_path), open(file_path, 'rb'), 'audio/mpeg')}
-        data = {"model": "whisper-large-v3"}
-        r = requests.post(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            files=files,
-            data=data
-        )
-        if r.status_code == 200:
-            return r.json().get("text", "")
-        else:
-            return "Erro ao transcrever áudio."
-    except Exception as e:
-        return f"Falha: {str(e)}"
-
-# ========================
-# 🎬 Tentar gerar vídeo via Space pública (limitado)
-# ========================
-def generate_video(prompt):
-    try:
-        r = requests.post(
-            "https://api-inference.huggingface.com/spaces/PixArt/PixArt-alpha/",
-            headers={"Authorization": f"Bearer {HF_API_KEY}"},
-            json={"inputs": prompt}
-        )
-        if r.status_code == 200:
-            return r.json().get("video_url", "")
-        else:
-            return "Erro ao gerar vídeo."
-    except:
-        return "Falha ao gerar vídeo."
-
-# ========================
-# ✅ Rotas Flask
-# ========================
-
+# --- Rotas Flask ---
 @app.route("/")
 def index():
-    return "🤖 Hermes Bot Online!", 200
+    return "🤖 Hermes Agent Online!", 200
 
 @app.route("/health")
 def health():
     return "OK", 200
 
-@app.route(f"/{TOKEN}", methods=["POST"])
+@app.route(f"/{TOKEN}", methods=["GET", "POST"])
 def telegram_webhook():
-    try:
-        update = request.get_json()
-
-        # Comandos de texto
-        if "message" in update and "text" in update["message"]:
-            chat_id = update["message"]["chat"]["id"]
-            text = update["message"]["text"].strip()
-
-            # Comando: /img <descrição>
-            if text.startswith("/img "):
-                prompt = text[5:]
-                img_bytes = generate_image(prompt)
-                if img_bytes:
-                    url = "https://api.telegram.org/bot" + TOKEN + "/sendPhoto"
-                    requests.post(url, files={"photo": img_bytes}, data={"chat_id": chat_id})
-                else:
-                    send_message(chat_id, "Falha ao gerar imagem.")
-                return "OK", 200
-
-            # Comando: /video <descrição>
-            elif text.startswith("/video "):
-                prompt = text[7:]
-                result = generate_video(prompt)
-                send_message(chat_id, result)
-                return "OK", 200
-
-            # Mensagem normal (responde com Qwen)
-            else:
-                answer = call_openrouter(text)
-                send_message(chat_id, answer)
-                return "OK", 200
-
-        # Recepção de áudio (voice note)
-        elif "message" in update and "voice" in update["message"]:
-            chat_id = update["message"]["chat"]["id"]
-            file_id = update["message"]["voice"]["file_id"]
-            file_path = download_telegram_file(file_id)
-            if file_path:
-                transcript = transcribe_audio(file_path)
-                send_message(chat_id, f"📝 Transcrição: {transcript}")
-            else:
-                send_message(chat_id, "Não foi possível baixar áudio.")
-            return "OK", 200
-
+    if request.method == "POST":
+        process_update(request.get_json())
         return "OK", 200
+    return "✅ Webhook configurado!", 200
+
+@app.route("/webhook", methods=["POST"])
+def webhook_route():
+    process_update(request.get_json())
+    return "OK", 200
+
+# --- Processa atualizações do Telegram ---
+def process_update(update):
+    try:
+        chat_id = update["message"]["chat"]["id"]
+        message = update["message"]
+
+        if "text" in message:
+            text = message["text"].strip()
+            logger.info(f"[MSG] {chat_id}: {text}")
+
+            if text.startswith("/img"):
+                prompt_img = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato fofo"
+                generate_image(chat_id, prompt_img)
+
+            elif text.startswith("/video"):
+                prompt_video = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato dançando"
+                generate_video(chat_id, prompt_video)
+
+            else:
+                query_llm(chat_id, text)
 
     except Exception as e:
-        logger.error(f"Erro no webhook: {e}")
-        return "OK", 200
+        logger.error(f"Erro no processamento: {str(e)}")
 
-# ========================
-# 🛰️ Funções auxiliares
-# ========================
+# --- LLM via OpenRouter ---
+def query_llm(chat_id, prompt):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://hermes-agent-render.onrender.com",
+        "X-Title": "Hermes Agent"
+    }
+    data = {
+        "model": LLM_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 2048
+    }
 
+    try:
+        r = requests.post(url, json=data, headers=headers, timeout=30)
+        if r.status_code == 200:
+            resposta = r.json()
+            if "choices" in resposta:
+                send_message(chat_id, resposta["choices"][0]["message"]["content"])
+            else:
+                send_message(chat_id, f"⚠️ Resposta inesperada: {resposta}")
+        else:
+            send_message(chat_id, f"❌ Erro na API: {r.status_code} - {r.text[:100]}")
+    except Exception as e:
+        send_message(chat_id, f"❌ Falha na conexão: {str(e)}")
+
+# --- Geração de Imagens (HuggingFace) ---
+def generate_image(chat_id, prompt):
+    url = f"https://api-inference.huggingface.com/models/{IMAGE_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    data = {"inputs": prompt}
+
+    try:
+        r = requests.post(url, headers=headers, json=data, timeout=60)
+        if r.status_code == 200:
+            send_photo(chat_id, r.content)
+        else:
+            send_message(chat_id, f"❌ Erro ao gerar imagem: {r.status_code} - {r.text[:100]}")
+    except Exception as e:
+        send_message(chat_id, f"❌ Falha ao gerar imagem: {str(e)}")
+
+# --- Geração de Vídeo (HuggingFace) ---
+def generate_video(chat_id, prompt):
+    url = f"https://api-inference.huggingface.com/models/{VIDEO_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    data = {"inputs": prompt}
+
+    try:
+        r = requests.post(url, headers=headers, json=data, timeout=60)
+        if r.status_code == 200:
+            send_video(chat_id, r.content, prompt)
+        else:
+            send_message(chat_id, f"❌ Erro ao gerar vídeo: {r.status_code} - {r.text[:100]}")
+    except Exception as e:
+        send_message(chat_id, f"❌ Falha ao gerar vídeo: {str(e)}")
+
+# --- Mensagens do Telegram ---
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
 
-def download_telegram_file(file_id):
-    url = f"https://api.telegram.org/bot{TOKEN}/getFile"
-    resp = requests.post(url, json={"file_id": file_id})
-    if resp.status_code == 200:
-        path = resp.json()["result"]["file_path"]
-        download_url = f"https://api.telegram.org/file/bot{TOKEN}/{path}"
-        local_file = "temp_audio.mp3"
-        r = requests.get(download_url)
-        if r.status_code == 200:
-            with open(local_file, "wb") as f:
-                f.write(r.content)
-            return local_file
-    return None
+def send_photo(chat_id, photo_bytes):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    files = {"photo": photo_bytes}
+    requests.post(url, files=files, data={"chat_id": chat_id})
 
+def send_video(chat_id, video_bytes, caption=""):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
+    files = {"video": video_bytes}
+    requests.post(url, files=files, data={"chat_id": chat_id, "caption": caption})
+
+# --- Configura webhook ---
+def set_webhook():
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
+    r = requests.post(url, json={"url": WEBHOOK_URL})
+    if r.status_code == 200:
+        logger.info(f"✅ Webhook configurado: {WEBHOOK_URL}")
+    else:
+        logger.warning(f"⚠️ Erro ao configurar webhook: {r.text}")
+
+# --- Start ---
 if __name__ == "__main__":
+    set_webhook()
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
