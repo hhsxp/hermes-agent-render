@@ -4,17 +4,14 @@ from flask import Flask, request
 import requests
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# App Flask
 app = Flask(__name__)
 
 def call_llm(prompt):
@@ -25,7 +22,7 @@ def call_llm(prompt):
         "X-Title": "Hermes Bot"
     }
     data = {
-        "model": "meta-llama/llama-4-maverick:free",
+        "model": "nousresearch/tailwind-v1.5b:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
         "temperature": 0.7
