@@ -35,7 +35,7 @@ def call_llm(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "google/gemini-2.0-flash-thinking",
+        "model": "microsoft/phi-3-mini-4k-instruct:free",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente inteligente e útil."},
             {"role": "user", "content": prompt}
