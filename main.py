@@ -21,7 +21,7 @@ def call_openrouter(prompt):
         "X-Title": "Hermes Agent"
     }
     payload = {
-        "model": "openrouter/qwen/qwen-2-vl-72b-instruct",
+        "model": "qwen/qwen-2-vl-72b-instruct",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
         "temperature": 0.7
