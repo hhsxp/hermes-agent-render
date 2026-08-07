@@ -51,7 +51,7 @@ except KeyError:
 def generate_image(prompt):
     try:
         r = requests.post(
-            "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1024-v12",
+            "https://api-inference.huggingface.com/models/stabilityai/stable-diffusion-xl-base-1024-v12",
             headers={"Authorization": f"Bearer {HF_API_KEY}"},
             json={"inputs": prompt}
         )
@@ -88,7 +88,7 @@ def transcribe_audio(file_path):
 def generate_video(prompt):
     try:
         r = requests.post(
-            "https://api-inference.huggingface.co/spaces/PixArt/PixArt-alpha/",
+            "https://api-inference.huggingface.com/spaces/PixArt/PixArt-alpha/",
             headers={"Authorization": f"Bearer {HF_API_KEY}"},
             json={"inputs": prompt}
         )
