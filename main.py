@@ -1,56 +1,46 @@
 import os
 import logging
-from flask import Flask, request
 import requests
-from dotenv import load_dotenv
+from flask import Flask, request
 
-load_dotenv()
-
+# Carrega variáveis de ambiente
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 app = Flask(__name__)
 
-def call_llm(prompt):
-    models = [
-        "nousresearch/tailwind-v1.5b:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free"
-    ]
-    for model in models:
-        try:
-            url = "https://openrouter.ai/api/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
-                "X-Title": "Hermes Bot"
-            }
-            data = {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 512
-            }
-            r = requests.post(url, json=data, headers=headers, timeout=15)
-            if r.status_code == 200:
-                return r.json()["choices"][0]["message"]["content"]
-            else:
-                logger.warning(f"Modelo {model} falhou: {r.status_code}")
-        except Exception as e:
-            logger.error(f"Falha com {model}: {str(e)}")
-    return "⚠️ Todos os modelos falharam. Tente novamente."
+def call_openrouter(prompt):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
+        "X-Title": "Hermes Agent"
+    }
+    payload = {
+        "model": "meta-llama/llama-4-maverick:free",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1024,
+        "temperature": 0.7
+    }
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=30)
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        else:
+            logger.warning(f"Erro OpenRouter ({r.status_code}): {r.text[:150]}")
+            return f"Erro na API ({r.status_code}): {r.text[:100]}"
+    except Exception as e:
+        logger.error(f"Falha na LLM: {str(e)}")
+        return f"Falha na conexão: {str(e)}"
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
     try:
-        requests.post(url, json=payload)
+        requests.post(url, json={"chat_id": chat_id, "text": text})
     except Exception as e:
         logger.error(f"Erro ao enviar mensagem: {str(e)}")
 
@@ -66,7 +56,7 @@ def telegram_webhook():
         text = update["message"]["text"]
 
         logger.info(f"[{chat_id}] {text}")
-        answer = call_llm(text)
+        answer = call_openrouter(text)
         send_message(chat_id, answer)
 
         return "OK", 200
@@ -76,9 +66,9 @@ def telegram_webhook():
         return "OK", 200
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-def telegram_webhook_token():
+def direct_webhook():
     return telegram_webhook()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
