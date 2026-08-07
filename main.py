@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'localhost')}.onrender.com")
 
@@ -18,26 +19,29 @@ logger = logging.getLogger(__name__)
 # Flask app
 app = Flask(__name__)
 
-# Groq API endpoint (OpenRouter fallback)
-def call_openrouter(prompt):
-    url = "https://openrouter.ai/api/v1/chat/completions"
+# --- Função para chamar Groq ---
+def call_llm(prompt):
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "nousresearch/tailwind-v1.5b:free",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1024
+    data = {
+        "model": "llama3-8b-8192",  # ✅ Gratuito e estável
+        "messages": [
+            {"role": "system", "content": "Você é Hermes, um assistente inteligente."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7
     }
     try:
-        r = requests.post(url, json=payload, headers=headers, timeout=60)
+        r = requests.post(url, json=data, headers=headers, timeout=15)
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
         else:
-            return f"Erro na API: {r.status_code} - {r.text[:100]}"
+            return f"Erro ({r.status_code}): {r.text[:100]}"
     except Exception as e:
-        return f"Falha na conexão: {str(e)}"
+        return f"Falha: {str(e)}"
 
 # Telegram webhook route
 @app.route(f"/{TOKEN}", methods=["POST"])
