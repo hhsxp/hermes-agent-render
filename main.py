@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 WEBHOOK_URL = "https://hermes-agent-render-21ab.onrender.com/webhook"
 
 # Modelos
-LLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
 IMAGE_MODEL = "stabilityai/sdxl-lightning"
 VIDEO_MODEL = "Wendhe/Go_with_the_flow"
@@ -51,7 +51,7 @@ def send_video(chat_id, video_bytes, caption=""):
 # LLM via HuggingFace (com fallback)
 def query_llm(chat_id, prompt):
     hf_url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
 
     try:
         r = requests.post(hf_url, headers=headers, json={"inputs": prompt}, timeout=60)
