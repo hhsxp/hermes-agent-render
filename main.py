@@ -35,7 +35,7 @@ def call_llm(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "meta-llama/llama-3.1-70b:free",
+        "model": "google/gemini-2.5-flash",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente inteligente e útil."},
             {"role": "user", "content": prompt}
