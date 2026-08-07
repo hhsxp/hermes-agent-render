@@ -22,6 +22,8 @@ def call_openrouter(prompt):
     }
     payload = {
         "model": "qwen/qwen-2-vl-72b-instruct",
+        "model"; "stability-ai/symbol-0:free",
+        "model"; "bytedance/flare-upix-xl:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
         "temperature": 0.7
