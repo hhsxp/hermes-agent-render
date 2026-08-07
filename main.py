@@ -15,13 +15,15 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 def call_llm(prompt):
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://hermes-agent-render-21ab.onrender.com",
+        "X-Title": "Hermes Agent"
     }
-    data = {
-        "model": "microsoft/phi-3-mini-4k-instruct:free",
+    payload = {
+        "model": "qwen/qwen-3-7b:free",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
             {"role": "user", "content": prompt}
@@ -30,13 +32,15 @@ def call_llm(prompt):
         "temperature": 0.7
     }
     try:
-        r = requests.post(url, json=data, headers=headers, timeout=15)
+        r = requests.post(url, json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
             return r.json()["choices"][0]["message"]["content"]
         else:
-            return f"Erro ({r.status_code}): {r.text[:100]}"
+            logger.error(f"Erro OpenRouter: {r.status_code} - {r.text[:200]}")
+            return f"Erro na API ({r.status_code}): {r.text[:100]}"
     except Exception as e:
-        return f"Falha: {str(e)}"
+        logger.error(f"Falha na LLM: {str(e)}")
+        return f"Falha na conexão: {str(e)}"
 
 @app.route("/")
 def index():
