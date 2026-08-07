@@ -4,89 +4,70 @@ import threading
 import time
 import requests
 from flask import Flask, request
-from dotenv import load_dotenv
 
-# --- Carrega variáveis ---
-load_dotenv()
-
+# Carrega variáveis
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_API_KEY = os.getenv("HF_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# --- Flask ---
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Configurações ---
 WEBHOOK_URL = "https://hermes-agent-render-21ab.onrender.com/webhook"
 
-# Modelos atualizados
+# Modelos
 LLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
 IMAGE_MODEL = "stabilityai/sdxl-lightning"
 VIDEO_MODEL = "Wendhe/Go_with_the_flow"
 
-# --- Keepalive ---
-def keepalive():
+# Keepalive
+def ping_server():
     while True:
         try:
-            requests.get("https://hermes-agent-render-21ab.onrender.com")
+            requests.get("https://hermes-agent-render-21ab.onrender.com/health")
         except Exception as e:
-            logger.warning(f"Ping falhou: {str(e)}")
+            logger.warning(f"Ping failed: {e}")
         time.sleep(25 * 60)
 
-threading.Thread(target=keepalive, daemon=True).start()
+threading.Thread(target=ping_server, daemon=True).start()
 
-# --- Funções auxiliares ---
+# Enviar mensagem
 def send_message(chat_id, text):
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-        json={"chat_id": chat_id, "text": text}
-    )
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    requests.post(url, json={"chat_id": chat_id, "text": text})
 
+# Enviar imagem
 def send_photo(chat_id, photo_bytes):
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendPhoto",
-        files={"photo": photo_bytes},
-        data={"chat_id": chat_id}
-    )
+    url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    requests.post(url, files={"photo": photo_bytes}, data={"chat_id": chat_id})
 
+# Enviar vídeo
 def send_video(chat_id, video_bytes, caption=""):
-    requests.post(
-        f"https://api.telegram.org/bot{TOKEN}/sendVideo",
-        files={"video": video_bytes},
-        data={"chat_id": chat_id, "caption": caption}
-    )
+    url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
+    requests.post(url, files={"video": video_bytes}, data={"chat_id": chat_id, "caption": caption})
 
-# --- LLM via HuggingFace ---
+# LLM via HuggingFace (com fallback)
 def query_llm(chat_id, prompt):
-    url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
-    headers = {
-        "Authorization": f"Bearer {HF_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "inputs": prompt
-    }
+    hf_url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+
     try:
-        r = requests.post(url, json=data, headers=headers, timeout=30)
+        r = requests.post(hf_url, headers=headers, json={"inputs": prompt}, timeout=60)
         if r.status_code == 200:
             result = r.json()
-            if isinstance(result, list) and len(result) > 0:
-                resposta = result[0].get("generated_text", "Sem resposta.")
-                send_message(chat_id, resposta)
-            else:
-                send_message(chat_id, f"ℹ️ Resposta: {str(result)[:200]}")
+            resposta = result[0]["generated_text"] if isinstance(result, list) else str(result)[:500]
+            send_message(chat_id, resposta)
         else:
-            logger.warning(f"LLM falhou ({r.status_code}): {r.text[:200]}")
-            # Fallback para OpenRouter
-            fallback_chat(chat_id, prompt)
+            logger.warning(f"HuggingFace failed ({r.status_code}): {r.text[:100]}")
+            fallback_llm(chat_id, prompt)
     except Exception as e:
-        logger.error(f"Falha LLM: {str(e)}")
-        fallback_chat(chat_id, prompt)
+        logger.error(f"Erro no HuggingFace: {e}")
+        fallback_llm(chat_id, prompt)
 
-# --- Fallback via OpenRouter ---
-def fallback_chat(chat_id, prompt):
+# Fallback via OpenRouter
+def fallback_llm(chat_id, prompt):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -95,23 +76,19 @@ def fallback_chat(chat_id, prompt):
         "X-Title": "Hermes Agent"
     }
     data = {
-        "model": "meta-llama/llama-4-maverick",
+        "model": FALLBACK_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 2048,
         "temperature": 0.7
     }
     try:
         r = requests.post(url, json=data, headers=headers, timeout=30)
-        if r.status_code == 200:
-            resposta = r.json()["choices"][0]["message"]["content"]
-            send_message(chat_id, resposta)
-        else:
-            err = r.json().get("error", {}).get("message", "Erro desconhecido")
-            send_message(chat_id, f"⚠️ Erro no fallback: {err[:200]}")
+        resposta = r.json()["choices"][0]["message"]["content"]
+        send_message(chat_id, f"[Fallback] {resposta}")
     except Exception as e:
-        send_message(chat_id, f"❌ Ambos os modelos falharam: {str(e)}")
+        send_message(chat_id, f"❌ Erro: {str(e)}")
 
-# --- Gerar imagem (HuggingFace) ---
+# Gerar imagem
 def generate_image(chat_id, prompt):
     url = f"https://api-inference.huggingface.co/models/{IMAGE_MODEL}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
@@ -121,13 +98,11 @@ def generate_image(chat_id, prompt):
         if r.status_code == 200:
             send_photo(chat_id, r.content)
         else:
-            logger.warning(f"Fallback imagem: {r.status_code}")
-            fallback_chat(chat_id, f"Desenhe digitalmente: {prompt}")
+            send_message(chat_id, f"⚠️ Erro imagem: {r.status_code}")
     except Exception as e:
-        logger.error(f"Falha imagem: {str(e)}")
-        fallback_chat(chat_id, f"Desenhe digitalmente: {prompt}")
+        send_message(chat_id, f"❌ Falha gerar imagem: {str(e)}")
 
-# --- Gerar vídeo (HuggingFace) ---
+# Gerar vídeo
 def generate_video(chat_id, prompt):
     url = f"https://api-inference.huggingface.co/models/{VIDEO_MODEL}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
@@ -137,13 +112,11 @@ def generate_video(chat_id, prompt):
         if r.status_code == 200:
             send_video(chat_id, r.content, prompt)
         else:
-            logger.warning(f"Fallback vídeo: {r.status_code}")
-            fallback_chat(chat_id, prompt)
+            send_message(chat_id, f"⚠️ Erro vídeo: {r.status_code}")
     except Exception as e:
-        logger.error(f"Falha vídeo: {str(e)}")
-        fallback_chat(chat_id, prompt)
+        send_message(chat_id, f"❌ Falha gerar vídeo: {str(e)}")
 
-# --- Processamento de atualizações ---
+# Processar atualização
 def process_update(update):
     try:
         chat_id = update["message"]["chat"]["id"]
@@ -151,18 +124,18 @@ def process_update(update):
         logger.info(f"[{chat_id}] {text}")
 
         if text.startswith("/img"):
-            prompt_img = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato fofo"
+            prompt_img = text[5:].strip() or "um gato fofo"
             generate_image(chat_id, prompt_img)
         elif text.startswith("/video"):
-            prompt_video = text.split(" ", 1)[1] if len(text.split(" ")) > 1 else "um gato dançando"
+            prompt_video = text[7:].strip() or "um cachorro dançando"
             generate_video(chat_id, prompt_video)
         else:
             query_llm(chat_id, text)
     except Exception as e:
         logger.error(f"Erro no processamento: {str(e)}")
-        send_message(chat_id, "❌ Ocorreu um erro no processamento.")
+        send_message(chat_id, "❌ Ocorreu um erro interno.")
 
-# --- Rotas Flask ---
+# Rotas Flask
 @app.route("/")
 def index():
     return "🤖 Hermes Agent Online!", 200
@@ -177,19 +150,15 @@ def telegram_webhook():
         process_update(request.get_json())
         return "OK", 200
     except Exception as e:
-        logger.error(f"Erro no webhook: {str(e)}")
+        logger.error(f"Erro no webhook: {e}")
         return "OK", 200
 
-# --- Configura webhook ---
+# Configurar webhook
 def set_webhook():
     url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
-    r = requests.post(url, json={"url": WEBHOOK_URL})
-    if r.status_code == 200:
-        logger.info(f"✅ Webhook configurado: {WEBHOOK_URL}")
-    else:
-        logger.warning(f"❌ Erro no webhook: {r.text}")
+    requests.post(url, json={"url": WEBHOOK_URL})
 
-# --- Inicializa ---
+# Iniciar
 if __name__ == "__main__":
     set_webhook()
     port = int(os.environ.get("PORT", 10000))
