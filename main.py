@@ -43,7 +43,7 @@ def query_huggingface(prompt, image_url=None):
 
 # --- Text-to-Image (Stable Diffusion XL) ---
 def generate_image(prompt):
-    api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1024-v12"
+    api_url = "https://api-inference.huggingface.com/models/stabilityai/stable-diffusion-xl-base-1024-v12"
     headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
     payload = {"inputs": prompt}
 
