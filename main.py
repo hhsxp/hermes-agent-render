@@ -21,7 +21,7 @@ def call_llm(prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "llama3-8b-8192",
+        "model": "deepseek-coder-v2-lite:free",
         "messages": [
             {"role": "system", "content": "Você é Hermes, um assistente útil e educado."},
             {"role": "user", "content": prompt}
