@@ -53,7 +53,7 @@ def telegram_webhook():
         chat_id = update["message"]["chat"]["id"]
         text = update["message"]["text"]
 
-        answer = call_llm(text)
+        answer = call_llm(text)  # ou call_openrouter(text)
 
         send_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         requests.post(send_url, json={"chat_id": chat_id, "text": answer})
