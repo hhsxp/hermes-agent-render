@@ -25,12 +25,9 @@ app = Flask(__name__)
 WEBHOOK_URL = "https://hermes-agent-render-21ab.onrender.com/webhook"
 
 # Modelos
-LLM_MODEL = "tiiuae/falcon-7b-instruct"
-FALLBACK_MODEL = "nousresearch/tailwind-v1.5b:free"
-IMAGE_MODEL = "stabilityai/sdxl-lightning"
-VIDEO_MODEL = "Wendhe/Go_with_the_flow"
+LLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 
-# Keepalive (evita inatividade)
+# Keepalive
 def ping_server():
     while True:
         try:
@@ -41,7 +38,7 @@ def ping_server():
 
 threading.Thread(target=ping_server, daemon=True).start()
 
-# Funções de envio
+# Funções auxiliares
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": chat_id, "text": text})
@@ -54,6 +51,30 @@ def send_video(chat_id, video_bytes, caption=""):
     url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
     requests.post(url, files={"video": video_bytes}, data={"chat_id": chat_id, "caption": caption})
 
+# Processamento de mensagens
+def process_update(update):
+    try:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "").strip()
+        logger.info(f"[{chat_id}] {text}")
+
+        # Comandos específicos
+        if text.startswith("/start") or text.startswith("/help"):
+            send_message(chat_id, "🤖 Hermes Agent Online!\nComandos:\n/img <descrição> - Gera imagem\n/video <descrição> - Gera vídeo")
+        elif text.startswith("/img"):
+            parts = text.split(" ", 1)
+            prompt_img = parts[1] if len(parts) > 1 else "um gato fofo"
+            generate_image(chat_id, prompt_img)
+        elif text.startswith("/video"):
+            parts = text.split(" ", 1)
+            prompt_video = parts[1] if len(parts) > 1 else "um cachorro dançando"
+            generate_video(chat_id, prompt_video)
+        else:
+            query_llm(chat_id, text)
+    except Exception as e:
+        logger.error(f"Erro no processamento: {str(e)}")
+        send_message(chat_id, "❌ Ocorreu um erro interno.")
+
 # LLM via HuggingFace
 def query_llm(chat_id, prompt):
     hf_url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}"
@@ -64,17 +85,17 @@ def query_llm(chat_id, prompt):
         if r.status_code == 200:
             result = r.json()
             if isinstance(result, list) and len(result) > 0 and "generated_text" in result[0]:
-                return send_message(chat_id, result[0]["generated_text"])
+                send_message(chat_id, result[0]["generated_text"])
             elif isinstance(result, dict) and "text" in result:
-                return send_message(chat_id, result["text"])
+                send_message(chat_id, result["text"])
             else:
-                return send_message(chat_id, f"Resposta inesperada: {str(result)[:200]}")
+                send_message(chat_id, f"Resposta inesperada: {str(result)[:200]}")
         else:
             logger.warning(f"HF falhou ({r.status_code})")
-            return fallback_llm(chat_id, prompt)
+            fallback_llm(chat_id, prompt)
     except Exception as e:
         logger.error(f"Erro no HuggingFace: {e}")
-        return fallback_llm(chat_id, prompt)
+        fallback_llm(chat_id, prompt)
 
 # Fallback via OpenRouter
 def fallback_llm(chat_id, prompt):
@@ -86,7 +107,7 @@ def fallback_llm(chat_id, prompt):
         "X-Title": "Hermes Agent"
     }
     data = {
-        "model": FALLBACK_MODEL,
+        "model": "meta-llama/llama-4-maverick",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 2048
     }
@@ -99,7 +120,7 @@ def fallback_llm(chat_id, prompt):
 
 # Geração de imagem
 def generate_image(chat_id, prompt):
-    url = f"https://api-inference.huggingface.co/models/{IMAGE_MODEL}"
+    url = f"https://api-inference.huggingface.co/models/stabilityai/sdxl-lightning"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     data = {"inputs": prompt}
     try:
@@ -113,7 +134,7 @@ def generate_image(chat_id, prompt):
 
 # Geração de vídeo
 def generate_video(chat_id, prompt):
-    url = f"https://api-inference.huggingface.co/models/{VIDEO_MODEL}"
+    url = f"https://api-inference.huggingface.co/models/Wendhe/Go_with_the_flow"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     data = {"inputs": prompt}
     try:
@@ -124,25 +145,6 @@ def generate_video(chat_id, prompt):
             send_message(chat_id, f"⚠️ Erro vídeo ({r.status_code})")
     except Exception as e:
         send_message(chat_id, f"❌ Falha gerar vídeo: {str(e)}")
-
-# Processamento de mensagens
-def process_update(update):
-    try:
-        chat_id = update["message"]["chat"]["id"]
-        text = update["message"].get("text", "").strip()
-        logger.info(f"[{chat_id}] {text}")
-
-        if text.startswith("/img"):
-            prompt_img = text[5:].strip() or "um gato fofo"
-            generate_image(chat_id, prompt_img)
-        elif text.startswith("/video"):
-            prompt_video = text[7:].strip() or "um cachorro dançando"
-            generate_video(chat_id, prompt_video)
-        else:
-            query_llm(chat_id, text)
-    except Exception as e:
-        logger.error(f"Erro no processamento: {str(e)}")
-        send_message(chat_id, "❌ Ocorreu um erro interno.")
 
 # Rotas Flask
 @app.route("/")
