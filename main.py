@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 def call_llm(prompt, image_url=None):
-    api_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct"
+    api_url = "https://api-inference.huggingface.com/models/Qwen/Qwen2.5-VL-7B-Instruct"
     headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
 
     if image_url:
