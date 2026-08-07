@@ -34,7 +34,12 @@ def call_openrouter(prompt):
     try:
         r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=30)
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"]
+            if r.status_code != 200:
+    return f"Erro ({r.status_code}): {r.text[:100]}"
+try:
+    return r.json()["choices"][0]["message"]["content"]
+except KeyError:
+    return f"Resposta inesperada: {r.text[:100]}"
         else:
             return f"Erro ({r.status_code}): {r.text[:100]}"
     except Exception as e:
